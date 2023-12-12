@@ -38,6 +38,10 @@
     ros : ros,
     name : '/rosbridge_websocket/port'
   });
+  
+  rosPort.get(function(value) {
+    console.log('rosbridge port param read ' + value);
+  });  
 
 </script>
 </head>
