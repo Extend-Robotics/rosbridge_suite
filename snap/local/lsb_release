@@ -1,6 +1,5 @@
 #! /bin/bash
 echo "No LSB modules are available.
-Distributor ID:	Ubuntu
-Description:	Ubuntu 20.04.6 LTS
-Release:	20.04
-Codename:	focal"
+Distributor ID: Ubuntu Core
+Description:    Ubuntu Core 20
+Release:	 20"

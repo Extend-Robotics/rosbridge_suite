@@ -20,8 +20,6 @@ parts:
        - ros-noetic-rosbash
        - ros-noetic-rosservice
        - ros-noetic-rosparam
-       - lsb-release
-       - lsb-core
        - python3-rosdep
        - python3-rosinstall
        - python3-rosinstall-generator
@@ -54,8 +52,5 @@ apps:
     command: opt/ros/noetic/bin/rosparam
     extensions: [ros1-noetic]
 
-  lsb-release:
-    command: usr/sbin/lsb_release
-    extensions: [ros1-noetic]
 
 
