@@ -16,6 +16,8 @@
   <arg name="use_compression" default="false" />
 
   <arg name="authenticate" default="false" />
+  <arg name="required_amas_protocol" default=""
+       doc="Reject clients whose ?amas_protocol= query is missing or below this. Empty disables the check." />
 
   <arg name="websocket_ping_interval" default="0" />
   <arg name="websocket_ping_timeout" default="30" />
@@ -36,6 +38,7 @@
       <param name="certfile" value="$(arg certfile)" />
       <param name="keyfile" value="$(arg keyfile)" />
       <param name="authenticate" value="$(arg authenticate)" />
+      <param name="required_amas_protocol" value="$(arg required_amas_protocol)" />
       <param name="port" value="$(arg port)"/>
       <param name="address" value="$(arg address)"/>
       <param name="retry_startup_delay" value="$(arg retry_startup_delay)"/>
@@ -58,6 +61,7 @@
   <group unless="$(arg ssl)">
     <node name="rosbridge_websocket" pkg="rosbridge_server" type="rosbridge_websocket" output="$(arg output)">
       <param name="authenticate" value="$(arg authenticate)" />
+      <param name="required_amas_protocol" value="$(arg required_amas_protocol)" />
       <param name="port" value="$(arg port)"/>
       <param name="address" value="$(arg address)"/>
       <param name="retry_startup_delay" value="$(arg retry_startup_delay)"/>

@@ -42,6 +42,7 @@ from functools import wraps
 from collections import deque
 
 from autobahn.twisted.websocket import WebSocketServerProtocol
+from autobahn.websocket.types import ConnectionDeny
 from twisted.internet import interfaces, reactor
 from zope.interface import implementer
 
@@ -65,6 +66,16 @@ def log_exceptions(f):
             _log_exception()
             raise
     return wrapper
+
+
+def is_client_amas_protocol_supported(client_amas_protocol_values, required_amas_protocol):
+    if len(client_amas_protocol_values) != 1:
+        return False
+    try:
+        client_amas_protocol = int(client_amas_protocol_values[0])
+    except ValueError:
+        return False
+    return client_amas_protocol >= required_amas_protocol
 
 
 class IncomingQueue(threading.Thread):
@@ -155,6 +166,7 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
     client_id_seed = 0
     clients_connected = 0
     authenticate = False
+    required_amas_protocol = None
 
     # The following are passed on to RosbridgeProtocol
     # defragmentation.py:
@@ -164,6 +176,19 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
     max_message_size = None                 # bytes
     unregister_timeout = 10.0               # seconds
     bson_only_mode = False
+
+    def onConnect(self, request):
+        cls = self.__class__
+        if cls.required_amas_protocol is not None:
+            client_amas_protocol_values = request.params.get("amas_protocol", [])
+            if not is_client_amas_protocol_supported(client_amas_protocol_values, cls.required_amas_protocol):
+                client_amas_protocol_description = (repr(",".join(client_amas_protocol_values))
+                                                    if client_amas_protocol_values else "missing")
+                rejection_reason = "AMAS client protocol {} is older than this robot requires ({}): update AMAS".format(
+                    client_amas_protocol_description, cls.required_amas_protocol)
+                rospy.logerr("Rejecting WebSocket client %s: %s", request.peer, rejection_reason)
+                raise ConnectionDeny(ConnectionDeny.FORBIDDEN, rejection_reason)
+        return WebSocketServerProtocol.onConnect(self, request)
 
     def onOpen(self):
         cls = self.__class__
