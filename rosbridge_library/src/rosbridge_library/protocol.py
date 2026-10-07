@@ -126,7 +126,7 @@ class Protocol:
             except UnicodeDecodeError:
                 self.log("error", "Received binary message with invalid UTF-8 encoding")
                 return
-            self.buffer = self.buffer + message_string
+        self.buffer = self.buffer + message_string
         msg = None
 
         # take care of having multiple JSON-objects in receiving buffer
