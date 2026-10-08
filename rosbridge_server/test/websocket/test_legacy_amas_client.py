@@ -10,6 +10,12 @@ import unittest
 import rosgraph
 import rospy
 import rostest
+from rosgraph_msgs.msg import Log
+
+try:
+    from urllib.parse import urlencode
+except ImportError:
+    from urllib import urlencode
 
 REQUIRED_PROTOCOL_PORT_PARAM = '/rosbridge_websocket/actual_port'
 NO_REQUIRED_PROTOCOL_PORT_PARAM = '/rosbridge_websocket_without_required_amas_protocol/actual_port'
@@ -32,6 +38,17 @@ SIXTEEN_BIT_LENGTH_MARKER = 126
 SIXTY_FOUR_BIT_LENGTH_MARKER = 127
 MAXIMUM_SIXTEEN_BIT_LENGTH = 0xffff
 END_OF_HTTP_HEADERS = b'\r\n\r\n'
+ROSOUT_TOPIC = '/rosout'
+LOG_TIMEOUT = 5.0  # seconds
+CURRENT_AMAS_BUILD_IDENTITY = (
+    ('amas_protocol', '2'),
+    ('amas_version', 'v2026.10.0-3-g1a2b3c4'),
+    ('amas_branch', 'amas_build_identity'),
+    ('amas_commit', '1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d'),
+    ('amas_commit_time', '2026-10-08T09:15:00+01:00'),
+    ('amas_build_time', '2026-10-08T10:00:00Z'),
+    ('amas_modified_files', '0'),
+)
 
 
 class WebSocketSharpLikeClient(object):
@@ -105,6 +122,29 @@ class WebSocketSharpLikeClient(object):
         self.connection.close()
 
 
+class RosoutRecorder:
+    def __init__(self):
+        self.messages = []
+        self.subscriber = rospy.Subscriber(ROSOUT_TOPIC, Log, self.messages.append)
+
+    def wait_until_connected_to_every_publisher(self):
+        while not rospy.is_shutdown() and (self.subscriber.get_num_connections() <
+                                           len(set(topic_publishers(ROSOUT_TOPIC)) - {rospy.get_name()})):
+            rospy.sleep(0.1)
+
+    def assert_logged_line_ending_with(self, node_name, expected_ending):
+        deadline = time.time() + LOG_TIMEOUT
+        while time.time() < deadline:
+            if any(log.endswith(expected_ending) for log in self.logs_from(node_name)):
+                return
+            time.sleep(0.1)
+        raise AssertionError('No {} log line ends with {!r}; it logged {!r}'.format(
+            node_name, expected_ending, self.logs_from(node_name)))
+
+    def logs_from(self, node_name):
+        return [message.msg for message in list(self.messages) if message.name == node_name]
+
+
 def topic_publishers(topic):
     publishers, _subscribers, _services = rosgraph.Master(NAME).getSystemState()
     return dict(publishers).get(topic, [])
@@ -121,6 +161,10 @@ class TestLegacyAmasClient(unittest.TestCase):
         self.addCleanup(client.close)
         self.assertEqual(SWITCHING_PROTOCOLS, client.handshake_status_code)
         return client
+
+    @staticmethod
+    def client_address(client):
+        return '127.0.0.1:{}'.format(client.connection.getsockname()[1])
 
     def send_get_param(self, client, call_id):
         client.send_binary_json({'op': 'call_service', 'id': call_id, 'service': 'rosapi/get_param',
@@ -207,6 +251,30 @@ class TestLegacyAmasClient(unittest.TestCase):
         self.advertise_and_publish_control_command(client, CURRENT_AMAS_CONTROL_TOPIC)
         self.assertEqual(['/rosbridge_websocket'], self.wait_for_publisher_registration(CURRENT_AMAS_CONTROL_TOPIC))
 
+    def test_current_amas_build_identity_is_logged_and_changes_nothing(self):
+        client = self.connect(REQUIRED_PROTOCOL_PORT_PARAM, '/?' + urlencode(CURRENT_AMAS_BUILD_IDENTITY))
+        ROSOUT_RECORDER.assert_logged_line_ending_with('/rosbridge_websocket', (
+            "{} declared AMAS build amas_version='v2026.10.0-3-g1a2b3c4' amas_branch='amas_build_identity' "
+            "amas_commit='1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d' amas_commit_time='2026-10-08T09:15:00+01:00' "
+            "amas_build_time='2026-10-08T10:00:00Z' amas_modified_files='0'").format(self.client_address(client)))
+        self.advertise_and_publish_control_command(client, CURRENT_AMAS_CONTROL_TOPIC)
+        self.assertEqual(['/rosbridge_websocket'], self.wait_for_publisher_registration(CURRENT_AMAS_CONTROL_TOPIC))
+
+    def test_partial_amas_build_identity_is_logged_escaped_and_truncated(self):
+        overlong_branch = 'b' * 150
+        client = self.connect(NO_REQUIRED_PROTOCOL_PORT_PARAM, '/?' + urlencode((
+            ('amas_version', 'v1\n[INFO] forged log line'), ('amas_branch', overlong_branch))))
+        ROSOUT_RECORDER.assert_logged_line_ending_with('/rosbridge_websocket_without_required_amas_protocol', (
+            "{} declared AMAS build amas_version='v1\\n[INFO] forged log line' amas_branch='{}'... "
+            "amas_commit=missing amas_commit_time=missing amas_build_time=missing amas_modified_files=missing"
+        ).format(self.client_address(client), 'b' * 100))
+
+    def test_client_without_amas_build_identity_is_logged(self):
+        client = self.connect(NO_REQUIRED_PROTOCOL_PORT_PARAM, '/')
+        ROSOUT_RECORDER.assert_logged_line_ending_with(
+            '/rosbridge_websocket_without_required_amas_protocol',
+            '{} declared no AMAS build identity'.format(self.client_address(client)))
+
     def test_any_client_is_unrestricted_when_no_protocol_is_required(self):
         client = self.connect(NO_REQUIRED_PROTOCOL_PORT_PARAM, '/')
         self.advertise_and_publish_control_command(client, UNRESTRICTED_BRIDGE_CONTROL_TOPIC)
@@ -219,11 +287,13 @@ NAME = 'test_legacy_amas_client'
 
 if __name__ == '__main__':
     rospy.init_node(NAME)
+    ROSOUT_RECORDER = RosoutRecorder()
     rospy.set_param(VISIBLE_PARAM, VISIBLE_PARAM_VALUE)
     rospy.wait_for_service('/rosapi/get_param')
 
     while not rospy.is_shutdown() and not (rospy.has_param(REQUIRED_PROTOCOL_PORT_PARAM) and
                                            rospy.has_param(NO_REQUIRED_PROTOCOL_PORT_PARAM)):
         rospy.sleep(1.0)
+    ROSOUT_RECORDER.wait_until_connected_to_every_publisher()
 
     rostest.rosrun(PKG, NAME, TestLegacyAmasClient)
