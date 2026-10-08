@@ -42,12 +42,13 @@ from functools import wraps
 from collections import deque
 
 from autobahn.twisted.websocket import WebSocketServerProtocol
-from autobahn.websocket.types import ConnectionDeny
 from twisted.internet import interfaces, reactor
 from zope.interface import implementer
 
 from rosbridge_library.rosbridge_protocol import RosbridgeProtocol
 from rosbridge_library.util import json, bson
+
+from rosbridge_server.legacy_amas_client import LegacyAmasProtocol
 
 
 def _log_exception():
@@ -167,6 +168,7 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
     clients_connected = 0
     authenticate = False
     required_amas_protocol = None
+    is_legacy_amas_client = False
 
     # The following are passed on to RosbridgeProtocol
     # defragmentation.py:
@@ -182,12 +184,12 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
         if cls.required_amas_protocol is not None:
             client_amas_protocol_values = request.params.get("amas_protocol", [])
             if not is_client_amas_protocol_supported(client_amas_protocol_values, cls.required_amas_protocol):
+                self.is_legacy_amas_client = True
                 client_amas_protocol_description = (repr(",".join(client_amas_protocol_values))
                                                     if client_amas_protocol_values else "missing")
-                rejection_reason = "AMAS client protocol {} is older than this robot requires ({}): update AMAS".format(
-                    client_amas_protocol_description, cls.required_amas_protocol)
-                rospy.logerr("Rejecting WebSocket client %s: %s", request.peer, rejection_reason)
-                raise ConnectionDeny(ConnectionDeny.FORBIDDEN, rejection_reason)
+                rospy.logwarn("WebSocket client %s declared AMAS protocol %s, older than this robot requires (%d): "
+                              "serving it read-only and asking the operator to update AMAS",
+                              request.peer, client_amas_protocol_description, cls.required_amas_protocol)
         return WebSocketServerProtocol.onConnect(self, request)
 
     def onOpen(self):
@@ -200,7 +202,9 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
             "bson_only_mode": cls.bson_only_mode
         }
         try:
-            self.protocol = RosbridgeProtocol(cls.client_id_seed, parameters=parameters)
+            self.protocol = (LegacyAmasProtocol(cls.client_id_seed, self.transport.getHost().port, parameters=parameters)
+                             if self.is_legacy_amas_client
+                             else RosbridgeProtocol(cls.client_id_seed, parameters=parameters))
             self.incoming_queue = IncomingQueue(self.protocol)
             self.incoming_queue.start()
             producer = OutgoingValve(self)

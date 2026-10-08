@@ -1,4 +1,5 @@
 <launch>
+  <node name="rosapi" pkg="rosapi" type="rosapi_node" />
   <node name="rosbridge_websocket" pkg="rosbridge_server" type="rosbridge_websocket.py">
     <param name="port" value="0" />
     <param name="required_amas_protocol" value="2" />
@@ -6,5 +7,5 @@
   <node name="rosbridge_websocket_without_required_amas_protocol" pkg="rosbridge_server" type="rosbridge_websocket.py">
     <param name="port" value="0" />
   </node>
-  <test test-name="test_required_amas_protocol" pkg="rosbridge_server" type="test_required_amas_protocol.py" />
+  <test test-name="test_legacy_amas_client" pkg="rosbridge_server" type="test_legacy_amas_client.py" />
 </launch>

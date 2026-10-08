@@ -17,7 +17,7 @@
 
   <arg name="authenticate" default="false" />
   <arg name="required_amas_protocol" default=""
-       doc="Reject clients whose ?amas_protocol= query is missing or below this. Empty disables the check." />
+       doc="Serve clients whose ?amas_protocol= query is missing or below this read-only, telling them to update AMAS. Empty disables the check." />
 
   <arg name="websocket_ping_interval" default="0" />
   <arg name="websocket_ping_timeout" default="30" />
