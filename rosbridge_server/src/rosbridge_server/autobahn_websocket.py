@@ -79,6 +79,27 @@ def is_client_amas_protocol_supported(client_amas_protocol_values, required_amas
     return client_amas_protocol >= required_amas_protocol
 
 
+AMAS_BUILD_IDENTITY_PARAMS = ("amas_version", "amas_branch", "amas_commit", "amas_commit_time",
+                              "amas_build_time", "amas_modified_files")
+MAX_LOGGED_AMAS_BUILD_IDENTITY_VALUE_LENGTH = 100
+
+
+def describe_amas_build_identity_value(values):
+    if not values:
+        return "missing"
+    joined_values = ",".join(values)
+    if len(joined_values) > MAX_LOGGED_AMAS_BUILD_IDENTITY_VALUE_LENGTH:
+        return repr(joined_values[:MAX_LOGGED_AMAS_BUILD_IDENTITY_VALUE_LENGTH]) + "..."
+    return repr(joined_values)
+
+
+def describe_amas_build_identity(request_params):
+    if not any(param in request_params for param in AMAS_BUILD_IDENTITY_PARAMS):
+        return None
+    return " ".join("{}={}".format(param, describe_amas_build_identity_value(request_params.get(param, [])))
+                    for param in AMAS_BUILD_IDENTITY_PARAMS)
+
+
 class IncomingQueue(threading.Thread):
     """Decouples incoming messages from the Autobahn thread.
 
@@ -181,6 +202,11 @@ class RosbridgeWebSocket(WebSocketServerProtocol):
 
     def onConnect(self, request):
         cls = self.__class__
+        amas_build_identity = describe_amas_build_identity(request.params)
+        if amas_build_identity is None:
+            rospy.loginfo("WebSocket client %s declared no AMAS build identity", request.peer)
+        else:
+            rospy.loginfo("WebSocket client %s declared AMAS build %s", request.peer, amas_build_identity)
         if cls.required_amas_protocol is not None:
             client_amas_protocol_values = request.params.get("amas_protocol", [])
             if not is_client_amas_protocol_supported(client_amas_protocol_values, cls.required_amas_protocol):
