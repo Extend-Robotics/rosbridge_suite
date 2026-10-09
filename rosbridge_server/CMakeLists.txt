@@ -27,4 +27,6 @@ install(FILES
 if (CATKIN_ENABLE_TESTING)
   find_package(rostest REQUIRED)
   add_rostest(test/websocket/test_smoke.test)
+  add_rostest(test/websocket/test_legacy_amas_client.test)
+  add_rostest(test/legacy_amas_client/test_legacy_amas_protocol.test)
 endif()

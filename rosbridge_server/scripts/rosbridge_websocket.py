@@ -64,6 +64,16 @@ def shutdown_hook():
         rospy.logwarn("Can't stop the reactor, it wasn't running")
 
 
+def parse_required_amas_protocol(required_amas_protocol_param):
+    if required_amas_protocol_param == '':
+        return None
+    required_amas_protocol_text = str(required_amas_protocol_param)
+    if not required_amas_protocol_text.isdigit() or int(required_amas_protocol_text) < 1:
+        raise ValueError("~required_amas_protocol must be empty or a positive integer, got {!r}".format(
+            required_amas_protocol_param))
+    return int(required_amas_protocol_text)
+
+
 if __name__ == "__main__":
     rospy.init_node("rosbridge_websocket")
 
@@ -97,6 +107,8 @@ if __name__ == "__main__":
     keyfile = rospy.get_param('~keyfile', None)
     # if authentication should be used
     RosbridgeWebSocket.authenticate = rospy.get_param('~authenticate', False)
+    RosbridgeWebSocket.required_amas_protocol = parse_required_amas_protocol(
+        rospy.get_param('~required_amas_protocol', ''))
     port = rospy.get_param('~port', 9090)
     address = rospy.get_param('~address', "0.0.0.0")
 
