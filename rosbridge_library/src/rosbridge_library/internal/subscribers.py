@@ -95,7 +95,7 @@ class MultiSubscriber():
         self.lock = Lock()
         self.topic = topic
         self.msg_class = msg_class
-        self.subscriber = Subscriber(topic, msg_class, self.callback)
+        self.subscriber = Subscriber(topic, msg_class, self.callback, tcp_nodelay=True)
 
     def unregister(self):
         self.subscriber.unregister()

@@ -5,6 +5,7 @@ import rostest
 import unittest
 from rosgraph import Master
 
+from socket import IPPROTO_TCP, TCP_NODELAY
 from time import sleep, time
 
 from rosbridge_library.internal.subscribers import *
@@ -179,6 +180,19 @@ class TestMultiSubscriber(unittest.TestCase):
         sleep(0.5)
         self.assertEqual(msg.data, received["msg1"]["data"])
         self.assertEqual(msg.data, received["msg2"]["data"])
+
+    def test_publisher_connection_has_tcp_nodelay(self):
+        topic = "/test_publisher_connection_has_tcp_nodelay"
+        msg_type = "std_msgs/String"
+
+        pub = rospy.Publisher(topic, String, queue_size=1)
+        multi = MultiSubscriber(topic, msg_type)
+        sleep(0.5)
+
+        publisher_sockets = [connection.socket for connection in pub.impl.connections]
+        self.assertEqual(len(publisher_sockets), 1)
+        self.assertTrue(publisher_sockets[0].getsockopt(IPPROTO_TCP, TCP_NODELAY))
+        multi.unregister()
 
 
 PKG = 'rosbridge_library'
